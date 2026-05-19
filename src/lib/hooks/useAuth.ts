@@ -50,36 +50,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Check for an existing session first
-    fetch('/api/auth/me')
-      .then((r) => (r.ok ? r.json() : null))
-      .then(async (data) => {
-        if (data?.user) {
-          // Already have a valid session — no need to re-authenticate
-          setUser(data.user);
-          setLoading(false);
-          return;
-        }
+    const isPiBrowser = typeof window !== 'undefined' && !!window.Pi;
 
-        // 2. No session — attempt automatic Pi authentication
-        if (typeof window === 'undefined' || !window.Pi) {
-          // Not running inside Pi Browser; skip auto-auth
-          setLoading(false);
-          return;
-        }
+    if (!isPiBrowser) {
+      // Regular browser — just restore existing session, no Pi auth
+      fetch('/api/auth/me')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => setUser(data?.user || null))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+      return;
+    }
 
-        try {
-          const auth = await piInitAndAuthenticate();
-          const { user: authedUser } = await sendTokenToBackend(auth.accessToken, auth.user);
-          setUser(authedUser);
-        } catch (err) {
-          // Auto-auth failure is non-fatal; user can retry via the sign-in button
-          console.warn('[Pi] Auto-authentication failed:', err);
-        } finally {
-          setLoading(false);
-        }
+    // Pi Browser — call Pi.authenticate() immediately without any delay.
+    // Pi Browser requires this call to happen as soon as the app loads.
+    piInitAndAuthenticate()
+      .then(async (auth) => {
+        const { user: authedUser } = await sendTokenToBackend(auth.accessToken, auth.user);
+        setUser(authedUser);
       })
-      .catch(() => setLoading(false));
+      .catch((err) => {
+        console.error('[Pi] Authentication error:', err);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   // Manual sign-in trigger (re-runs init + authenticate)
