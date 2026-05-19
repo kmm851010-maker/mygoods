@@ -48,7 +48,7 @@ function waitForPiSDK(timeoutMs = 5000): Promise<boolean> {
 async function piInitAndAuthenticate() {
   // Pi.init() returns a Promise in SDK v2 — await it before authenticate
   await window.Pi.init({ version: '2.0', sandbox: PI_SANDBOX });
-  return window.Pi.authenticate(['username'], (incompletePay) => {
+  return window.Pi.authenticate(['username', 'payments'], (incompletePay) => {
     console.warn('[Pi] Incomplete payment found:', incompletePay);
   });
 }
