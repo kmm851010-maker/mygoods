@@ -4,9 +4,10 @@ import { useAuth } from '@/lib/hooks/useAuth';
 
 interface PiLoginButtonProps {
   className?: string;
+  label?: string;
 }
 
-export default function PiLoginButton({ className = '' }: PiLoginButtonProps) {
+export default function PiLoginButton({ className = '', label }: PiLoginButtonProps) {
   const { signIn, loading } = useAuth();
 
   return (
@@ -20,7 +21,9 @@ export default function PiLoginButton({ className = '' }: PiLoginButtonProps) {
       ) : (
         <span className="text-lg">π</span>
       )}
-      <span>{loading ? '로그인 중...' : 'Pi로 로그인'}</span>
+      <span>
+        {loading ? '인증 중...' : label ?? 'Pi로 로그인'}
+      </span>
     </button>
   );
 }
