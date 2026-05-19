@@ -74,10 +74,11 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
 
     setPaying(true);
     try {
+      await window.Pi.init({ version: '2.0', sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === 'true' });
       window.Pi.createPayment(
         {
           amount: item.price,
-          memo: `mygoods: ${item.title}`,
+          memo: `mygoods 중고거래: ${item.title}`,
           metadata: { itemId: item.id },
         },
         {
@@ -99,6 +100,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ paymentId, txid }),
             });
+            setPaying(false);
             alert('결제가 완료되었습니다!');
             router.push('/my');
           },

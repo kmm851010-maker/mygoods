@@ -21,11 +21,20 @@ export async function POST(request: NextRequest) {
     // 1. Pi API에서 결제 정보 조회
     const piPayment = await getPiPayment(paymentId);
 
-    if (!piPayment || piPayment.status?.developer_approved) {
+    if (!piPayment) {
+      return NextResponse.json({ error: '결제 정보를 찾을 수 없습니다' }, { status: 404 });
+    }
+
+    if (piPayment.status?.developer_approved) {
       return NextResponse.json({ error: '이미 처리된 결제입니다' }, { status: 400 });
     }
 
-    // 2. 상품 정보 조회
+    // 2. 메타데이터의 itemId 검증
+    if (piPayment.metadata?.itemId !== itemId) {
+      return NextResponse.json({ error: '결제 메타데이터 불일치' }, { status: 400 });
+    }
+
+    // 3. 상품 정보 조회
     const supabase = await createServiceClient();
     const { data: item } = await supabase
       .from('items')
@@ -41,7 +50,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '이미 판매된 상품입니다' }, { status: 400 });
     }
 
-    // 3. Supabase transactions 테이블에 pending 저장
+    // 4. Pi가 보낸 금액과 상품 가격 일치 검증
+    if (Number(piPayment.amount) !== Number(item.price)) {
+      return NextResponse.json({ error: '결제 금액 불일치' }, { status: 400 });
+    }
+
+    // 5. Supabase transactions 테이블에 pending 저장
     const { error: txError } = await supabase.from('transactions').insert({
       item_id: itemId,
       buyer_id: buyerId,
@@ -57,7 +71,7 @@ export async function POST(request: NextRequest) {
       console.error('Transaction insert error:', txError);
     }
 
-    // 4. Pi API approve 호출
+    // 6. Pi API approve 호출
     await approvePiPayment(paymentId);
 
     return NextResponse.json({ ok: true });
