@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, MapPin, RefreshCw, ChevronDown } from 'lucide-react';
+import { Search, MapPin, RefreshCw, ChevronDown, Coins } from 'lucide-react';
 import BottomNav from '@/components/layout/BottomNav';
 import ItemList from '@/components/items/ItemList';
 import CategoryFilter from '@/components/items/CategoryFilter';
@@ -23,6 +23,42 @@ export default function HomePage() {
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [showLocationModal, setShowLocationModal] = useState(false);
+  const [testPayStatus, setTestPayStatus] = useState<'idle' | 'paying' | 'done' | 'error'>('idle');
+
+  const handleTestPayment = () => {
+    const Pi = (window as any).Pi;
+    if (!Pi) {
+      alert('Pi Browser에서만 결제할 수 있습니다.');
+      return;
+    }
+    setTestPayStatus('paying');
+    Pi.createPayment(
+      {
+        amount: 1,
+        memo: 'mygoods 테스트 결제',
+        metadata: { type: 'test' },
+      },
+      {
+        onReadyForServerApproval: async (paymentId: string) => {
+          await fetch('/api/payments/test/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paymentId }),
+          });
+        },
+        onReadyForServerCompletion: async (paymentId: string, txid: string) => {
+          await fetch('/api/payments/test/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paymentId, txid }),
+          });
+          setTestPayStatus('done');
+        },
+        onCancel: () => setTestPayStatus('idle'),
+        onError: () => setTestPayStatus('error'),
+      }
+    );
+  };
 
   // 첫 방문 시 위치 권한 모달 표시
   useEffect(() => {
@@ -135,6 +171,19 @@ export default function HomePage() {
       {/* Category Filter */}
       <div className="pt-3 pb-1 border-b border-gray-100">
         <CategoryFilter selected={category} onChange={setCategory} />
+      </div>
+
+      {/* 테스트 결제 배너 */}
+      <div className="px-4 py-3 bg-orange-50 border-b border-orange-100 flex items-center gap-3">
+        <Coins size={18} className="text-orange-500 flex-shrink-0" />
+        <span className="text-sm text-orange-700 flex-1">Pi 결제 테스트 (1 Pi)</span>
+        <button
+          onClick={handleTestPayment}
+          disabled={testPayStatus === 'paying'}
+          className="text-xs font-semibold px-3 py-1.5 bg-orange-500 text-white rounded-lg disabled:opacity-50"
+        >
+          {testPayStatus === 'paying' ? '결제 중...' : testPayStatus === 'done' ? '완료 ✓' : '결제하기'}
+        </button>
       </div>
 
       {/* 위치 미설정 배너 */}
