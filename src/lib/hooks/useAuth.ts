@@ -26,16 +26,37 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 const PI_SANDBOX = process.env.NEXT_PUBLIC_PI_SANDBOX === 'true';
 
-async function piInitAndAuthenticate(): Promise<{ accessToken: string; user: { uid: string; username: string } }> {
-  // Await Pi.init() as a Promise before calling authenticate
-  await window.Pi.init({ version: '2.0', sandbox: PI_SANDBOX });
+/** Poll until window.Pi is available (script loaded) or timeout. */
+function waitForPiSDK(timeoutMs = 5000): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined') return resolve(false);
+    if (window.Pi) return resolve(true);
 
+    const deadline = Date.now() + timeoutMs;
+    const id = setInterval(() => {
+      if (window.Pi) {
+        clearInterval(id);
+        resolve(true);
+      } else if (Date.now() >= deadline) {
+        clearInterval(id);
+        resolve(false);
+      }
+    }, 50);
+  });
+}
+
+async function piInitAndAuthenticate() {
+  // Pi.init() returns a Promise in SDK v2 — await it before authenticate
+  await window.Pi.init({ version: '2.0', sandbox: PI_SANDBOX });
   return window.Pi.authenticate(['username'], (incompletePay) => {
     console.warn('[Pi] Incomplete payment found:', incompletePay);
   });
 }
 
-async function sendTokenToBackend(accessToken: string, piUser: { uid: string; username: string }) {
+async function sendTokenToBackend(
+  accessToken: string,
+  piUser: { uid: string; username: string }
+) {
   const res = await fetch('/api/auth/pi', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -50,34 +71,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const isPiBrowser = typeof window !== 'undefined' && !!window.Pi;
+    // Wait for the Pi SDK script to finish loading, then authenticate.
+    // waitForPiSDK resolves false in a regular browser (no window.Pi).
+    waitForPiSDK().then(async (hasPi) => {
+      if (!hasPi) {
+        // Not Pi Browser — restore session from cookie only
+        const data = await fetch('/api/auth/me')
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null);
+        setUser(data?.user || null);
+        setLoading(false);
+        return;
+      }
 
-    if (!isPiBrowser) {
-      // Regular browser — just restore existing session, no Pi auth
-      fetch('/api/auth/me')
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => setUser(data?.user || null))
-        .catch(() => {})
-        .finally(() => setLoading(false));
-      return;
-    }
-
-    // Pi Browser — call Pi.authenticate() immediately without any delay.
-    // Pi Browser requires this call to happen as soon as the app loads.
-    piInitAndAuthenticate()
-      .then(async (auth) => {
+      // Pi Browser confirmed — Pi.authenticate() must be called now
+      try {
+        const auth = await piInitAndAuthenticate();
         const { user: authedUser } = await sendTokenToBackend(auth.accessToken, auth.user);
         setUser(authedUser);
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error('[Pi] Authentication error:', err);
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        setLoading(false);
+      }
+    });
   }, []);
 
-  // Manual sign-in trigger (re-runs init + authenticate)
   const signIn = useCallback(async () => {
-    if (typeof window === 'undefined' || !window.Pi) {
+    const hasPi = await waitForPiSDK(3000);
+    if (!hasPi) {
       alert('Pi Browser에서만 로그인할 수 있습니다');
       return;
     }

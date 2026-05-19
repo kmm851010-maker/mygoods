@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import './globals.css';
 import { AuthProvider } from '@/lib/hooks/useAuth';
 
@@ -24,6 +25,13 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko" className="h-full">
+      <head>
+        {/* Pi SDK — must load before any JS so Pi Browser can detect Pi.authenticate() */}
+        <Script
+          src="https://sdk.minepi.com/pi-sdk.js"
+          strategy="beforeInteractive"
+        />
+      </head>
       <body className="h-full bg-white text-gray-900 antialiased font-sans">
         <AuthProvider>
           <div className="max-w-lg mx-auto h-full relative">
